@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>尚学汇智教育</title>
+  <title>幸运抽奖小程序</title>
   <!-- 引入Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- 引入Font Awesome图标 -->
@@ -128,22 +128,23 @@
         <p class="text-gray-500 text-sm mt-1">您有 <span id="lotteryCount" class="text-primary font-bold">1</span> 次抽奖机会</p>
       </div>
       
-      <!-- 抽奖转盘 -->
+      <!-- 抽奖转盘（已修复：添加 .lottery-wheel 类名） -->
       <div class="relative w-full aspect-square max-w-[280px] mx-auto mb-6">
-        <div class="absolute inset-0 rounded-full bg-gradient-to-r from-primary to-secondary shadow-lg overflow-hidden">
+        <!-- 转盘容器：添加 .lottery-wheel 类名用于JS选择 -->
+        <div class="lottery-wheel absolute inset-0 rounded-full bg-gradient-to-r from-primary to-secondary shadow-lg overflow-hidden">
           <!-- 转盘分区 - 简化版 -->
           <div class="absolute inset-0 grid grid-cols-2 grid-rows-2">
             <div class="border-r border-b border-white/30 flex items-center justify-center text-white font-bold">
-              手机
+              一等奖
             </div>
             <div class="border-b border-white/30 flex items-center justify-center text-white font-bold">
-             平板
+              二等奖
             </div>
             <div class="border-r border-white/30 flex items-center justify-center text-white font-bold">
-              电脑
+              三等奖
             </div>
             <div class="flex items-center justify-center text-white font-bold">
-              谢谢参与
+              参与奖
             </div>
           </div>
           
@@ -333,27 +334,33 @@
       checkParticipationStatus(userInfo);
     });
     
-    // 抽奖功能
+    // 抽奖功能（已修复：转盘旋转逻辑）
     lotteryBtn.addEventListener('click', () => {
       // 禁用按钮防止重复点击
       lotteryBtn.disabled = true;
       lotteryBtn.textContent = '抽奖中...';
       
-      // 模拟转盘旋转效果
-      const转盘 = document.querySelector('.aspect-square');
-      转盘.classList.add('animate-spin');
+      // 正确选择转盘容器（通过 .lottery-wheel 类名）
+      const lotteryWheel = document.querySelector('.lottery-wheel');
       
-      // 随机生成中奖结果（3秒后揭晓）
+      // 生成随机旋转角度（3-5圈 + 0-360度随机偏移，更真实）
+      const randomCircle = 3 + Math.random() * 2; // 3-5圈
+      const randomDeg = randomCircle * 360 + Math.floor(Math.random() * 360);
+      
+      // 应用旋转动画：5秒平滑旋转，曲线更自然
+      lotteryWheel.style.transition = 'transform 5s cubic-bezier(0.2, 0.8, 0.2, 1)';
+      lotteryWheel.style.transform = `rotate(${randomDeg}deg)`;
+      
+      // 5秒后揭晓结果（与动画时长一致）
       setTimeout(() => {
-        转盘.classList.remove('animate-spin');
-        lotteryBtn.disabled = false;
-        lotteryBtn.textContent = '立即抽奖';
+        // 禁用过渡效果，避免后续操作卡顿
+        lotteryWheel.style.transition = 'none';
         
-        // 随机选择奖品（可调整概率）
+        // 随机选择奖品（可调整概率，比如想提高参与奖概率：Math.random() * 10 取0-9，前7为参与奖）
         const randomIndex = Math.floor(Math.random() * PRIZES.length);
         const winningPrize = PRIZES[randomIndex];
         
-        // 保存参与记录
+        // 保存参与记录到本地存储
         const userInfo = JSON.parse(localStorage.getItem(USER_INFO_KEY));
         const participants = JSON.parse(localStorage.getItem(PARTICIPANTS_KEY) || '[]');
         participants.push({
@@ -367,9 +374,13 @@
         // 显示中奖结果
         showPrizeResult(winningPrize, userInfo);
         
-        // 生成庆祝效果
+        // 生成庆祝彩屑
         createConfetti();
-      }, 3000);
+        
+        // 恢复按钮状态
+        lotteryBtn.disabled = false;
+        lotteryBtn.textContent = '立即抽奖';
+      }, 5000);
     });
     
     // 显示中奖结果
@@ -435,7 +446,6 @@
     // 按钮事件
     restartBtn.addEventListener('click', () => {
       resultSection.classList.add('hidden');
-      joinedSection.classList.remove('hidden');
       joinedSection.classList.add('hidden');
       formSection.classList.remove('hidden');
       
@@ -468,5 +478,4 @@
     });
   </script>
 </body>
-
 </html>
