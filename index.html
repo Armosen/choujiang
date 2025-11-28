@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>幸运抽奖小程序</title>
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入Font Awesome图标 -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <!-- 引入QRCode.js生成扫码入口 -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  
+  <!-- 自定义配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#FF4D6D',
+            secondary: '#FFB72B',
+            dark: '#1F2937',
+            light: '#F9FAFB'
+          },
+          fontFamily: {
+            inter: ['Inter', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .prize-animation {
+        animation: prizeBounce 0.6s ease-in-out;
+      }
+      .shake {
+        animation: shake 0.5s ease-in-out;
+      }
+      .confetti {
+        position: fixed;
+        width: 10px;
+        height: 10px;
+        background-color: #f2d74e;
+        opacity: 0;
+        animation: confettiFall 3s ease-in-out infinite;
+      }
+    }
+    
+    @keyframes prizeBounce {
+      0% { transform: scale(0.8); opacity: 0; }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-10px); }
+      40% { transform: translateX(10px); }
+      60% { transform: translateX(-5px); }
+      80% { transform: translateX(5px); }
+    }
+    
+    @keyframes confettiFall {
+      0% {
+        transform: translateY(-100vh) rotate(0deg);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body class="font-inter bg-gradient-to-b from-light to-gray-100 min-h-screen text-dark">
+  <!-- 顶部导航 -->
+  <header class="bg-white shadow-sm sticky top-0 z-50">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <h1 class="text-[clamp(1.2rem,3vw,1.5rem)] font-bold text-primary flex items-center">
+        <i class="fa fa-gift mr-2"></i>幸运抽奖
+      </h1>
+      <button id="ruleBtn" class="text-gray-600 hover:text-primary transition-colors">
+        <i class="fa fa-info-circle mr-1"></i>活动规则
+      </button>
+    </div>
+  </header>
+
+  <!-- 主要内容区 -->
+  <main class="container mx-auto px-4 py-8 max-w-md">
+    <!-- 抽奖海报 -->
+    <div class="relative rounded-2xl overflow-hidden mb-8 shadow-lg">
+      <img src="https://picsum.photos/800/400" alt="抽奖活动海报" class="w-full h-48 object-cover">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex items-end">
+        <h2 class="text-white text-xl font-bold p-4">幸运大转盘 · 好礼等你拿</h2>
+      </div>
+    </div>
+
+    <!-- 表单区域 - 未登录状态 -->
+    <div id="formSection" class="bg-white rounded-2xl p-6 shadow-md mb-8">
+      <h3 class="text-lg font-bold mb-4 text-center text-dark">请完善信息参与抽奖</h3>
+      
+      <div class="space-y-4">
+        <div>
+          <label for="name" class="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+          <input type="text" id="name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors" placeholder="请输入您的姓名" required>
+        </div>
+        
+        <div>
+          <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">手机号码</label>
+          <input type="tel" id="phone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-colors" placeholder="请输入您的手机号码" pattern="^1[3-9]\d{9}$" required>
+        </div>
+        
+        <button id="submitBtn" class="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+          <i class="fa fa-check-circle mr-2"></i>提交信息参与抽奖
+        </button>
+      </div>
+    </div>
+
+    <!-- 抽奖区域 - 已登录状态（默认隐藏） -->
+    <div id="lotterySection" class="bg-white rounded-2xl p-6 shadow-md mb-8 hidden">
+      <div class="text-center mb-6">
+        <h3 class="text-lg font-bold text-dark">欢迎您，<span id="userName" class="text-primary"></span>！</h3>
+        <p class="text-gray-500 text-sm mt-1">您有 <span id="lotteryCount" class="text-primary font-bold">1</span> 次抽奖机会</p>
+      </div>
+      
+      <!-- 抽奖转盘 -->
+      <div class="relative w-full aspect-square max-w-[280px] mx-auto mb-6">
+        <div class="absolute inset-0 rounded-full bg-gradient-to-r from-primary to-secondary shadow-lg overflow-hidden">
+          <!-- 转盘分区 - 简化版 -->
+          <div class="absolute inset-0 grid grid-cols-2 grid-rows-2">
+            <div class="border-r border-b border-white/30 flex items-center justify-center text-white font-bold">
+              一等奖
+            </div>
+            <div class="border-b border-white/30 flex items-center justify-center text-white font-bold">
+              二等奖
+            </div>
+            <div class="border-r border-white/30 flex items-center justify-center text-white font-bold">
+              三等奖
+            </div>
+            <div class="flex items-center justify-center text-white font-bold">
+              参与奖
+            </div>
+          </div>
+          
+          <!-- 转盘指针 -->
+          <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 w-8 h-12 bg-white rounded-full shadow-lg flex items-center justify-center z-10">
+            <div class="w-4 h-4 bg-primary rounded-full"></div>
+          </div>
+        </div>
+        
+        <!-- 抽奖按钮 -->
+        <button id="lotteryBtn" class="absolute inset-0 m-auto w-24 h-24 bg-white rounded-full shadow-xl flex items-center justify-center text-primary font-bold text-lg hover:bg-gray-50 transition-colors">
+          立即抽奖
+        </button>
+      </div>
+    </div>
+
+    <!-- 中奖结果区域（默认隐藏） -->
+    <div id="resultSection" class="bg-white rounded-2xl p-6 shadow-md mb-8 hidden">
+      <div class="text-center">
+        <div id="prizeIcon" class="w-24 h-24 mx-auto mb-4 flex items-center justify-center rounded-full bg-primary/10">
+          <i class="fa fa-trophy text-4xl text-secondary"></i>
+        </div>
+        
+        <h3 id="prizeTitle" class="text-2xl font-bold text-dark mb-2">恭喜您中奖啦！</h3>
+        <p id="prizeDesc" class="text-gray-600 mb-6">您获得了 [奖品名称]，请凭有效信息领取</p>
+        
+        <div id="winningInfo" class="bg-gray-50 rounded-lg p-4 text-left mb-6">
+          <p class="text-sm text-gray-700 mb-1"><i class="fa fa-user mr-2 text-primary"></i>姓名：<span id="winnerName"></span></p>
+          <p class="text-sm text-gray-700"><i class="fa fa-phone mr-2 text-primary"></i>手机号：<span id="winnerPhone"></span></p>
+        </div>
+        
+        <button id="restartBtn" class="w-full bg-gray-200 hover:bg-gray-300 text-dark font-bold py-3 px-4 rounded-lg transition-colors">
+          返回首页
+        </button>
+      </div>
+    </div>
+
+    <!-- 已参与提示（默认隐藏） -->
+    <div id="joinedSection" class="bg-white rounded-2xl p-6 shadow-md mb-8 hidden text-center">
+      <div class="w-20 h-20 mx-auto mb-4 flex items-center justify-center rounded-full bg-gray-100">
+        <i class="fa fa-check text-3xl text-gray-500"></i>
+      </div>
+      
+      <h3 class="text-xl font-bold text-dark mb-2">您已参与过抽奖</h3>
+      <p class="text-gray-600 mb-6">每人仅限参与一次，感谢您的参与！</p>
+      
+      <button id="backBtn" class="w-full bg-gray-200 hover:bg-gray-300 text-dark font-bold py-3 px-4 rounded-lg transition-colors">
+        返回
+      </button>
+    </div>
+  </main>
+
+  <!-- 底部信息 -->
+  <footer class="bg-dark text-white py-6">
+    <div class="container mx-auto px-4 text-center text-sm text-gray-400">
+      <p>© 2025 幸运抽奖活动 版权所有</p>
+      <p class="mt-2">客服电话：400-123-4567</p>
+    </div>
+  </footer>
+
+  <!-- 活动规则弹窗 -->
+  <div id="ruleModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold text-dark">活动规则</h3>
+        <button id="closeRuleBtn" class="text-gray-500 hover:text-gray-700">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="space-y-3 text-gray-700 text-sm">
+        <p>1. 活动时间：2025年1月1日 - 2025年1月31日</p>
+        <p>2. 参与方式：填写真实姓名和手机号码即可参与抽奖</p>
+        <p>3. 抽奖规则：每人仅限参与一次，重复提交无效</p>
+        <p>4. 中奖须知：中奖后请凭填写的个人信息联系客服领取奖品</p>
+        <p>5. 奖品发放：中奖后7个工作日内联系发放，逾期未领取视为自动放弃</p>
+        <p>6. 作弊处理：如发现恶意刷奖、虚假信息等作弊行为，将取消中奖资格</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 全局变量
+    const PRIZES = [
+      { id: 1, title: "一等奖", desc: "价值2000元智能手机一部", icon: "fa-trophy", color: "#FFD700" },
+      { id: 2, title: "二等奖", desc: "价值500元购物卡一张", icon: "fa-gift", color: "#C0C0C0" },
+      { id: 3, title: "三等奖", desc: "价值100元话费充值", icon: "fa-mobile", color: "#CD7F32" },
+      { id: 4, title: "参与奖", desc: "精美小礼品一份", icon: "fa-thumbs-up", color: "#95A5A6" }
+    ];
+    
+    // DOM元素
+    const formSection = document.getElementById('formSection');
+    const lotterySection = document.getElementById('lotterySection');
+    const resultSection = document.getElementById('resultSection');
+    const joinedSection = document.getElementById('joinedSection');
+    const submitBtn = document.getElementById('submitBtn');
+    const lotteryBtn = document.getElementById('lotteryBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const backBtn = document.getElementById('backBtn');
+    const ruleBtn = document.getElementById('ruleBtn');
+    const closeRuleBtn = document.getElementById('closeRuleBtn');
+    const ruleModal = document.getElementById('ruleModal');
+    
+    // 本地存储键名
+    const PARTICIPANTS_KEY = 'lottery_participants';
+    const USER_INFO_KEY = 'lottery_user_info';
+    
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      // 检查是否已有用户信息
+      const userInfo = localStorage.getItem(USER_INFO_KEY);
+      if (userInfo) {
+        const user = JSON.parse(userInfo);
+        checkParticipationStatus(user);
+      }
+      
+      // 生成扫码入口（实际部署时替换为你的线上地址）
+      const currentUrl = window.location.href;
+      QRCode.toCanvas(document.createElement('canvas'), currentUrl, { width: 128 });
+    });
+    
+    // 检查参与状态
+    function checkParticipationStatus(user) {
+      const participants = JSON.parse(localStorage.getItem(PARTICIPANTS_KEY) || '[]');
+      
+      // 检查是否已参与（通过姓名或手机号匹配）
+      const hasParticipated = participants.some(p => 
+        p.name === user.name || p.phone === user.phone
+      );
+      
+      if (hasParticipated) {
+        // 已参与，显示提示
+        formSection.classList.add('hidden');
+        lotterySection.classList.add('hidden');
+        resultSection.classList.add('hidden');
+        joinedSection.classList.remove('hidden');
+      } else {
+        // 未参与，显示抽奖区域
+        formSection.classList.add('hidden');
+        lotterySection.classList.remove('hidden');
+        resultSection.classList.add('hidden');
+        joinedSection.classList.add('hidden');
+        
+        // 显示用户名
+        document.getElementById('userName').textContent = user.name;
+      }
+    }
+    
+    // 表单提交
+    submitBtn.addEventListener('click', () => {
+      const name = document.getElementById('name').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      
+      // 表单验证
+      if (!name) {
+        showError('请输入您的姓名');
+        document.getElementById('name').classList.add('shake', 'border-red-500');
+        setTimeout(() => document.getElementById('name').classList.remove('shake', 'border-red-500'), 500);
+        return;
+      }
+      
+      if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+        showError('请输入有效的手机号码');
+        document.getElementById('phone').classList.add('shake', 'border-red-500');
+        setTimeout(() => document.getElementById('phone').classList.remove('shake', 'border-red-500'), 500);
+        return;
+      }
+      
+      // 检查是否已参与
+      const participants = JSON.parse(localStorage.getItem(PARTICIPANTS_KEY) || '[]');
+      const hasParticipated = participants.some(p => 
+        p.name === name || p.phone === phone
+      );
+      
+      if (hasParticipated) {
+        // 已参与，显示提示
+        formSection.classList.add('hidden');
+        joinedSection.classList.remove('hidden');
+        return;
+      }
+      
+      // 保存用户信息
+      const userInfo = { name, phone };
+      localStorage.setItem(USER_INFO_KEY, JSON.stringify(userInfo));
+      
+      // 显示抽奖区域
+      checkParticipationStatus(userInfo);
+    });
+    
+    // 抽奖功能
+    lotteryBtn.addEventListener('click', () => {
+      // 禁用按钮防止重复点击
+      lotteryBtn.disabled = true;
+      lotteryBtn.textContent = '抽奖中...';
+      
+      // 模拟转盘旋转效果
+      const转盘 = document.querySelector('.aspect-square');
+      转盘.classList.add('animate-spin');
+      
+      // 随机生成中奖结果（3秒后揭晓）
+      setTimeout(() => {
+        转盘.classList.remove('animate-spin');
+        lotteryBtn.disabled = false;
+        lotteryBtn.textContent = '立即抽奖';
+        
+        // 随机选择奖品（可调整概率）
+        const randomIndex = Math.floor(Math.random() * PRIZES.length);
+        const winningPrize = PRIZES[randomIndex];
+        
+        // 保存参与记录
+        const userInfo = JSON.parse(localStorage.getItem(USER_INFO_KEY));
+        const participants = JSON.parse(localStorage.getItem(PARTICIPANTS_KEY) || '[]');
+        participants.push({
+          ...userInfo,
+          prizeId: winningPrize.id,
+          prizeName: winningPrize.title,
+          participateTime: new Date().toISOString()
+        });
+        localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(participants));
+        
+        // 显示中奖结果
+        showPrizeResult(winningPrize, userInfo);
+        
+        // 生成庆祝效果
+        createConfetti();
+      }, 3000);
+    });
+    
+    // 显示中奖结果
+    function showPrizeResult(prize, user) {
+      document.getElementById('prizeTitle').textContent = `恭喜获得${prize.title}！`;
+      document.getElementById('prizeDesc').textContent = prize.desc;
+      document.getElementById('winnerName').textContent = user.name;
+      document.getElementById('winnerPhone').textContent = user.phone;
+      
+      // 更新奖品图标和颜色
+      const prizeIcon = document.getElementById('prizeIcon');
+      prizeIcon.innerHTML = `<i class="fa ${prize.icon} text-4xl" style="color: ${prize.color}"></i>`;
+      
+      // 切换显示状态
+      lotterySection.classList.add('hidden');
+      resultSection.classList.remove('hidden');
+    }
+    
+    // 生成庆祝彩屑
+    function createConfetti() {
+      const colors = ['#f2d74e', '#95c3de', '#ff9a91', '#97d5a3', '#ffb72b', '#FF4D6D'];
+      
+      for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.classList.add('confetti');
+        
+        // 随机颜色、位置、大小、动画延迟
+        confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+        confetti.style.left = `${Math.random() * 100}vw`;
+        confetti.style.width = `${Math.random() * 10 + 5}px`;
+        confetti.style.height = `${Math.random() * 10 + 5}px`;
+        confetti.style.animationDelay = `${Math.random() * 3}s`;
+        
+        document.body.appendChild(confetti);
+        
+        // 动画结束后移除元素
+        setTimeout(() => {
+          confetti.remove();
+        }, 3000);
+      }
+    }
+    
+    // 错误提示
+    function showError(message) {
+      // 检查是否已有提示框
+      let errorToast = document.querySelector('.error-toast');
+      if (errorToast) {
+        errorToast.remove();
+      }
+      
+      // 创建新提示框
+      errorToast = document.createElement('div');
+      errorToast.className = 'error-toast fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+      errorToast.textContent = message;
+      document.body.appendChild(errorToast);
+      
+      // 3秒后移除
+      setTimeout(() => {
+        errorToast.remove();
+      }, 3000);
+    }
+    
+    // 按钮事件
+    restartBtn.addEventListener('click', () => {
+      resultSection.classList.add('hidden');
+      joinedSection.classList.remove('hidden');
+      joinedSection.classList.add('hidden');
+      formSection.classList.remove('hidden');
+      
+      // 清除用户信息
+      localStorage.removeItem(USER_INFO_KEY);
+    });
+    
+    backBtn.addEventListener('click', () => {
+      joinedSection.classList.add('hidden');
+      formSection.classList.remove('hidden');
+      
+      // 清除用户信息
+      localStorage.removeItem(USER_INFO_KEY);
+    });
+    
+    // 规则弹窗
+    ruleBtn.addEventListener('click', () => {
+      ruleModal.classList.remove('hidden');
+    });
+    
+    closeRuleBtn.addEventListener('click', () => {
+      ruleModal.classList.add('hidden');
+    });
+    
+    // 点击弹窗外部关闭
+    ruleModal.addEventListener('click', (e) => {
+      if (e.target === ruleModal) {
+        ruleModal.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
